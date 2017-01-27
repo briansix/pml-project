@@ -1,0 +1,71 @@
+# Smart Sensors and Dumbell Data
+## Modeling the accuracy of weight lifting actions.
+### *Brian Burnham*
+
+Ugulino, Velloso and Fuks have assembled the Weight Lifting Dataset as part of their exploration into Human Activity Recognician. This data set includes a variable that captures the form used by the participant to lift weights. Our task is to model the inputs captured from four sensors (and additional variables) to predict the form used (classe A, B, C, D or E). 
+
+## Obtain and Clean the Data
+We will remove the NAs and #DIV/0! and read the data into R.
+
+```{r}
+training <- read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', na.strings = c("#DIV/0!","NA",""))
+testing <- read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', na.strings = c("#DIV/0!","NA",""))
+```
+
+## Create Partitions for Cross Validation
+We will separate the training data into a train and test set for purposes of **cross validation**. Due to the amount of data, we will train on a smaller portion (p=0.7).
+
+```{r}
+library(caret); library(randomForest)
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+train <- training[inTrain,]
+test <- training[-inTrain,]
+```
+
+## Factor Selection
+To increase performance, we will also remove variables with a significant amount of mull values. In this code we will remove all columns where more than 50% of the values are null. That takes us down to a more managemable 60 variables. Also, we will remove the first seven variables (user, times) that are not relevant to prediction.  
+
+```{r}
+dim(train)
+half <- nrow(train)*.5
+half
+tmp <- train
+tmp <- tmp[, which(as.numeric(colSums(is.na(tmp))) < half)] 
+names(tmp[,c(1:7)])
+tmp <- tmp[,-c(1:7)]
+dim(tmp)
+train <- tmp
+```
+
+## Build the Model
+We will apply the Randon Forrest model, selected for performance and accuracy with non-linear variables. The first severall passes were very time-consuming, so I switched to the parRF method and enabled multi-processor support to speed up performance. To boost accuracy and **cross validate** I added train parameters, set to 3 folds. 
+
+```{r}
+library(doParallel);registerDoParallel()
+modFit <- train(classe~.,data=train,method="parRF",prox=TRUE, allowParallel=TRUE, trControl=trainControl(method="cv", number=3))
+modFit
+modFit$finalModel
+```
+
+## Test the Model
+The results are encouraging, with accuracy in the high 90's. This model looks effective enough to test. Next we'll apply the model to the validation test set and review its accuracy in a Confusion Matrix. 
+
+```{r}
+cross_validation <- predict(modFit,newdata=test)
+# cross_validation
+confusionMatrix(test$classe,cross_validation)
+```
+
+When applied to the test set, we get 99% accuracy, and consistant accuracy across the different classe values. 
+
+## Apply the Model
+Next we'll use the second data set of 20 test cases:
+
+```{r}
+final_test <- predict(modFit, newdata=testing)
+# final_test
+print(as.data.frame(final_test))
+```
+
+
+
